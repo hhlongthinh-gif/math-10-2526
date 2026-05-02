@@ -23,6 +23,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ settings, onComplete }) 
   const [timeLeft, setTimeLeft] = React.useState(isRaceMode ? RACE_TIME_PER_QUESTION : settings.duration * 60);
   const [startTime] = React.useState(Date.now());
 
+  const currentIdxRef = React.useRef(currentIdx);
+  currentIdxRef.current = currentIdx;
+
+  const answersRef = React.useRef(answers);
+  answersRef.current = answers;
+
   const handleSubmit = React.useCallback(() => {
     // Note: We use a functional update or closure value if needed, 
     // but here handleSubmit is usually called with the latest state in the effect or button click.
@@ -44,13 +50,9 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ settings, onComplete }) 
     });
   }, [startTime, onComplete]);
 
-  const handleNext = React.useCallback(() => {
-    // Logic: In race mode, you MUST select an answer to proceed.
-    if (isRaceMode && answers[currentIdx] === null) {
-      return;
-    }
-
-    if (currentIdx === questions.length - 1) {
+  const moveToNext = React.useCallback(() => {
+    const activeIdx = currentIdxRef.current;
+    if (activeIdx === questions.length - 1) {
       handleSubmit();
     } else {
       setCurrentIdx(p => p + 1);
@@ -58,28 +60,33 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ settings, onComplete }) 
         setTimeLeft(RACE_TIME_PER_QUESTION);
       }
     }
-  }, [currentIdx, isRaceMode, handleSubmit, answers]);
+  }, [isRaceMode, handleSubmit]);
+
+  const handleNext = React.useCallback(() => {
+    const activeIdx = currentIdxRef.current;
+    // Logic: In race mode, you MUST select an answer to proceed manually.
+    if (isRaceMode && answersRef.current[activeIdx] === null) {
+      return;
+    }
+    moveToNext();
+  }, [isRaceMode, moveToNext]);
 
   React.useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (isRaceMode) {
-            // Next question in race mode
-            handleNext();
-            return RACE_TIME_PER_QUESTION;
-          } else {
-            // End quiz in standard mode
-            clearInterval(timer);
-            handleSubmit();
-            return 0;
-          }
-        }
-        return prev - 1;
-      });
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
-  }, [isRaceMode, handleNext, handleSubmit]);
+  }, []);
+
+  React.useEffect(() => {
+    if (timeLeft === 0) {
+      if (isRaceMode) {
+        moveToNext();
+      } else {
+        handleSubmit();
+      }
+    }
+  }, [timeLeft, isRaceMode, moveToNext, handleSubmit]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
